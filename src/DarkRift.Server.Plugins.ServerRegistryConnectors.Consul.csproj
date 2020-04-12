@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>DarkRift.Server.Plugins.ServerRegistryConnectors.Consul</AssemblyName>
+    <RootNamespace>DarkRift.Server.Plugins.ServerRegistryConnectors.Consul</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Consul" Version="0.7.2.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="$(UserProfile)/.darkrift/installed/pro/core/dev/Lib/DarkRift.dll" />
+    <Reference Include="$(UserProfile)/.darkrift/installed/pro/core/dev/Lib/DarkRift.Server.dll" />
+  </ItemGroup>
+
+</Project>
