@@ -1,9 +1,16 @@
-# Your DarkRift Plugin
-This is a template for a DarkRift plugin. In here you'll find a basic plugin and C# project.
+# Consul ServerRegistryConnector
+This is a DarkRift ServerRegistryConnector plugin for Consul. It allows DarkRift to discover other servers in a system to connect to.
 
-# Documentation
-The main DarkRift documentation is available online [here](https://www.darkriftnetworking.com/DarkRift2/Docs/). There you'll find a tutorial, API reference, configuration reference and articles on more complex topics.
-
-There is also a community [wiki](https://github.com/DarkRiftNetworking/DarkRift/wiki) with a wealth of helpful resources and links.
-
-If you're looking for a place to ask questions you can ask on our [Unity forum thread](https://forum.unity.com/threads/darkrift-networking-2.516271/) or join our [Discord community](https://discordapp.com/invite/cz2FQ6k).
+## Settings
+The following settings are exposed and can be configured using the `<settings>` XML element in the DarkRift configuration file:
+```xml
+<dataConnector type="ConsulServerRegistryConnector">
+  <settings consulAddress="http://localhost:8500" />
+</dataConnector>
+```
+- `consulAddress` - The URI to connect to the Consul agent.
+- `consulDatacenter` - Datacenter to provide with each request. If not provided, the default agent datacenter is used.
+- `consulToken` - Token is used to provide an ACL token which overrides the agent's default token. This ACL token is used for every request by clients created using this configuration.
+- `healthCheckUrl` - The URL to set as the Consul health check for the server. Defaults to `http://localhost:10666/health`.
+- `healthCheckPollIntervalMs` - The poll interval of the Consul health check for the server, in milliseconds. Defaults to `5000ms`.
+- `healthCheckTimeoutMs` - The maximum time the Consul health check for the server can be failing for before the server is deregistered, in milliseconds. The Minimum value is `60000ms`, and granularity ~`30000ms`. Defaults to `60000ms`

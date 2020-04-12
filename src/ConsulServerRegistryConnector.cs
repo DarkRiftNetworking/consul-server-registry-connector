@@ -2,12 +2,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
 {
+    /// <summary>
+    /// DarkRift ServerRegistryConnector plugin for Consul.
+    /// </sumamry>
     public class ConsulServerRegistryConnector : ServerRegistryConnector
     {
         public override bool ThreadSafe => true;
@@ -15,23 +17,60 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
         public override Version Version => new Version(1, 0, 0);
 
         /// <summary>
-        ///     The ID of this server in Consul.
+        /// The URL to set as the Consul health check for the server.
         /// </summary>
-        private ushort id;
+        private readonly string healthCheckUrl = "http://localhost:10666/health";
 
         /// <summary>
-        ///     The servers know to us.
+        /// The poll interval of the Consul health check for the server.
         /// </summary>
-        private IEnumerable<ushort> knownServices = new HashSet<ushort>();
+        private readonly TimeSpan healthCheckPollInterval = TimeSpan.FromMilliseconds(5000);
+
+        /// <summary>
+        /// The maximum time the Consul health check for the server can be failing for before the server is deregistered.
+        /// </summary>
+        /// <remarks>
+        /// Minimuim 1m, granularity ~30 seconds.
+        /// </remarks>
+        private readonly TimeSpan healthCheckTimeout = TimeSpan.FromSeconds(60);
 
         /// <summary>
         ///     The client to connect to Consul via.
         /// </summary>
-        private readonly ConsulClient client = new ConsulClient();
+        private readonly ConsulClient client;
+
+        /// <summary>
+        ///     The ID of this server in Consul.
+        /// </summary>
+        private ushort id;          // TODO this should be accessible in the base plugin and not necessary to store here.
+
+        /// <summary>
+        ///     The servers known to us.
+        /// </summary>
+        private IEnumerable<ushort> knownServices = new HashSet<ushort>();
 
         public ConsulServerRegistryConnector(ServerRegistryConnectorLoadData pluginLoadData) : base(pluginLoadData)
         {
-            // TODO Allow config of Consul client host/ports etc.
+            client = new ConsulClient(configuration =>
+            {
+                if (pluginLoadData.Settings["consulAddress"] != null)
+                    configuration.Address = new Uri(pluginLoadData.Settings["consulAddress"]);
+
+                if (pluginLoadData.Settings["consulDatacenter"] != null)
+                    configuration.Datacenter = pluginLoadData.Settings["consulDatacenter"];
+
+                if (pluginLoadData.Settings["consulToken"] != null)
+                    configuration.Token = pluginLoadData.Settings["consulToken"];
+            });
+
+            if (pluginLoadData.Settings["healthCheckUrl"] != null)
+                healthCheckUrl = pluginLoadData.Settings["healthCheckUrl"];
+
+            if (pluginLoadData.Settings["healthCheckPollIntervalMs"] != null)
+                healthCheckPollInterval = TimeSpan.FromMilliseconds(int.Parse(pluginLoadData.Settings["healthCheckPollIntervalMs"]));
+
+            if (pluginLoadData.Settings["healthCheckTimeoutMs"] != null)
+                healthCheckTimeout = TimeSpan.FromMilliseconds(int.Parse(pluginLoadData.Settings["healthCheckTimeoutMs"]));
         }
 
         protected async Task FetchServices()
@@ -46,45 +85,35 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             }
             catch (Exception e)
             {
-                // TODO better choice of exception here?
-                throw new InvalidOperationException("Failed to fetch services from Consul.", e);
+                Logger.Error("Failed to fetch services from Consul as an exception occurred.", e);
+                return;
             }
 
             Dictionary<string, AgentService> services = result.Response;
 
             // Map to ushort IDs
-            // TODO catch FormatException
             Dictionary<ushort, AgentService> parsedServices = services.ToDictionary(kv => ushort.Parse(kv.Key), kv => kv.Value);
 
-            var joined = parsedServices.Keys.Except(knownServices);
-            var left = knownServices.Except(parsedServices.Keys);
+            IEnumerable<ushort> joined, left;
+            lock (knownServices)
+            {
+                joined = parsedServices.Keys.Except(knownServices);
+                left = knownServices.Except(parsedServices.Keys);
 
-            // TODO how should we handle ourselves?
+                knownServices = parsedServices.Keys;
+            }
+
             foreach (ushort joinedID in joined)
             {
-                if (joinedID != id)
-                {
-                    AgentService service = parsedServices[joinedID];
-                    string group = service.Tags.First().Substring(6);
+                AgentService service = parsedServices[joinedID];
+                string group = service.Tags.First().Substring(6);
 
-                    Logger.Trace($"Discovered server {joinedID} from group '{group}'.");
-
-                    HandleServerJoin(joinedID, group, service.Address, (ushort)service.Port, service.Meta);
-                }
+                HandleServerJoin(joinedID, group, service.Address, (ushort)service.Port, service.Meta);
             }
 
             //TODO consider just a set method instead of/as well as join/leave
             foreach (ushort leftID in left)
-            {
-                if (leftID != id)
-                {
-                    Logger.Trace($"Server {leftID} has left the system.");
-
-                    HandleServerLeave(leftID);
-                }
-            }
-
-            knownServices = parsedServices.Keys;
+                HandleServerLeave(leftID);
         }
 
         protected override void DeregisterServer()
@@ -100,8 +129,8 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             }
             catch (Exception e)
             {
-                // TODO better choice of exception here?
-                throw new InvalidOperationException("Failed to deregister the service with Consul.", e);
+                Logger.Error("Failed to deregister server from Consul as an exception occurred.", e);
+                return;
             }
         }
 
@@ -120,9 +149,9 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             // TODO add configuration
             AgentServiceCheck healthCheck = new AgentServiceCheck()
             {
-                HTTP = "http://localhost:10666/health",
-                Interval = TimeSpan.FromMilliseconds(5000),
-                DeregisterCriticalServiceAfter = TimeSpan.FromSeconds(60)       // Minimuim 1m, granularity ~30 seconds
+                HTTP = healthCheckUrl,
+                Interval = healthCheckPollInterval,
+                DeregisterCriticalServiceAfter = healthCheckTimeout
             };
 
             AgentServiceRegistration service = new AgentServiceRegistration
@@ -142,21 +171,13 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             }
             catch (Exception e)
             {
-                throw new InvalidOperationException("Failed to register the service with Consul.", e);
+                Logger.Error("Failed to register server with Consul as an exception occurred.", e);
+                throw e;
             }
 
             // Start timers and get an initial list
             FetchServices().Wait();
-            CreateTimer(10000, 10000, (_) => {
-                try
-                {
-                    FetchServices().Wait();
-                }
-                catch (Exception e)
-                {
-                    Logger.Error("Failed to fetch services from Consul.", e);
-                }
-            });
+            CreateTimer(10000, 10000, (_) => FetchServices().Wait());
 
             return id;
         }
@@ -189,7 +210,8 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
                     }
                     catch (Exception e)
                     {
-                        throw new InvalidOperationException("Failed to perform CAS operation on Consul.", e);
+                        Logger.Error("Failed to perform CAS operation on Consul while updating ID field.", e);
+                        throw e;
                     }
 
                     if (casResult.Response)
@@ -210,7 +232,8 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
                     }
                     catch (Exception e)
                     {
-                        throw new InvalidOperationException("Failed to perform CAS operation on Consul.", e);
+                        Logger.Error("Failed to perform CAS operation on Consul while creating ID field.", e);
+                        throw e;
                     }
 
                     if (casResult.Response)
@@ -218,6 +241,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
                 }
             }
 
+            Logger.Error("Failed to allocate ID from Consul as the operation exceeded the maximum number of allowed attempts (10).");
             throw new InvalidOperationException("Failed to allocate ID from Consul as the operation exceeded the maximum number of allowed attempts (10).");
         }
 
