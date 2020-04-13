@@ -39,16 +39,6 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
         /// </summary>
         private readonly ConsulClient client;
 
-        /// <summary>
-        ///     The ID of this server in Consul.
-        /// </summary>
-        private ushort id;          // TODO this should be accessible in the base plugin and not necessary to store here.
-
-        /// <summary>
-        ///     The servers known to us.
-        /// </summary>
-        private IEnumerable<ushort> knownServices = new HashSet<ushort>();
-
         public ConsulServerRegistryConnector(ServerRegistryConnectorLoadData pluginLoadData) : base(pluginLoadData)
         {
             client = new ConsulClient(configuration =>
@@ -70,17 +60,26 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
                 healthCheckPollInterval = TimeSpan.FromMilliseconds(int.Parse(pluginLoadData.Settings["healthCheckPollIntervalMs"]));
 
             if (pluginLoadData.Settings["healthCheckTimeoutMs"] != null)
+            {
                 healthCheckTimeout = TimeSpan.FromMilliseconds(int.Parse(pluginLoadData.Settings["healthCheckTimeoutMs"]));
+                if (healthCheckTimeout < TimeSpan.FromMinutes(1))
+                    throw new InvalidOperationException("healthCheckTimeout property cannot be less than 1 minute.");
+            }
         }
 
+        /// <summary>
+        /// Pulls the current services from Consul and updates the server with any changes to that list.
+        /// </summary>
+        /// <returns>A task object for the operation.</returns>
         protected async Task FetchServices()
         {
-            Logger.Trace($"Refreshing services (I'm server {id}).");
+            Logger.Trace($"Refreshing services (I'm server {ServerManager.ServerID}).");
 
+            // Query Consul for the current list of services
+            // TODO the library we use doesn't seem to allow us to get only services with a passing health check
             QueryResult<Dictionary<string, AgentService>> result;
             try
             {
-                // TODO this library doesn't seem to allow us to get only services with a passing health check
                 result = await client.Agent.Services();
             }
             catch (Exception e)
@@ -94,14 +93,13 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             // Map to ushort IDs
             Dictionary<ushort, AgentService> parsedServices = services.ToDictionary(kv => ushort.Parse(kv.Key), kv => kv.Value);
 
-            IEnumerable<ushort> joined, left;
-            lock (knownServices)
-            {
-                joined = parsedServices.Keys.Except(knownServices);
-                left = knownServices.Except(parsedServices.Keys);
+            // Get all known sevices
+            IEnumerable<ushort> knownServices = ServerManager.GetAllGroups().SelectMany(g => g.GetAllRemoteServers()).Select(s => s.ID);
 
-                knownServices = parsedServices.Keys;
-            }
+            // Diff the current services aginst the known services
+            IEnumerable<ushort> joined, left;
+            joined = parsedServices.Keys.Except(knownServices);
+            left = knownServices.Except(parsedServices.Keys);
 
             foreach (ushort joinedID in joined)
             {
@@ -121,11 +119,15 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             DeregisterServerAsync().Wait();
         }
 
+        /// <summary>
+        /// Deregisters the server with Consul.
+        /// </summary>
+        /// <returns>A task object for the operation.</returns>
         private async Task DeregisterServerAsync()
         {
             try
             {
-                await client.Agent.ServiceDeregister(id.ToString());
+                await client.Agent.ServiceDeregister(ServerManager.ServerID.ToString());
             }
             catch (Exception e)
             {
@@ -140,9 +142,17 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             return RegisterServerAsync(group, host, port, properties).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// Registers the server with Consul.
+        /// </summary>
+        /// <param name="group">The group the server is in.</param>
+        /// <param name="host">The advertised host property of the server.</param>
+        /// <param name="port">The advertised port property of the server.</param>
+        /// <param name="properties">Additional properties supplied by the server.</param>
+        /// <returns>A task object for the operation.</returns>
         private async Task<ushort> RegisterServerAsync(string group, string host, int port, IDictionary<string, string> properties)
         {
-            id = await AllocateID();
+            ushort id = await AllocateID();
 
             Logger.Trace("Registering server on Consul...");
 
@@ -185,7 +195,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
         /// <summary>
         ///     Allocates a new ID from Consul.
         /// </summary>
-        /// <returns>The ID allocated.</returns>
+        /// <returns>A task object for the operation with the ID allocated.</returns>
         private async Task<ushort> AllocateID()
         {
             for (int attempt = 0; attempt < 10; attempt++)
