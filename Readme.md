@@ -4,9 +4,9 @@ This is a DarkRift ServerRegistryConnector plugin for Consul. It allows DarkRift
 ## Settings
 The following settings are exposed and can be configured using the `<settings>` XML element in the DarkRift configuration file:
 ```xml
-<dataConnector type="ConsulServerRegistryConnector">
+<serverRegistryConnector type="ConsulServerRegistryConnector">
   <settings consulAddress="http://localhost:8500" />
-</dataConnector>
+</serverRegistryConnector>
 ```
 - `consulAddress` - The URI to connect to the Consul agent.
 - `consulDatacenter` - Datacenter to provide with each request. If not provided, the default agent datacenter is used.
