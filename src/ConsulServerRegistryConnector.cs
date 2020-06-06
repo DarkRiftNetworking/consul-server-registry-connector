@@ -73,7 +73,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
         /// <returns>A task object for the operation.</returns>
         protected async Task FetchServices()
         {
-            Logger.Trace($"Refreshing services (I'm server {ServerManager.ServerID}).");
+            Logger.Trace($"Refreshing services (I'm server {RemoteServerManager.ServerID}).");
 
             // Query Consul for the current list of services
             // TODO the library we use doesn't seem to allow us to get only services with a passing health check
@@ -94,7 +94,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             Dictionary<ushort, AgentService> parsedServices = services.ToDictionary(kv => ushort.Parse(kv.Key), kv => kv.Value);
 
             // Get all known sevices
-            IEnumerable<ushort> knownServices = ServerManager.GetAllGroups().SelectMany(g => g.GetAllRemoteServers()).Select(s => s.ID);
+            IEnumerable<ushort> knownServices = RemoteServerManager.GetAllGroups().SelectMany(g => g.GetAllRemoteServers()).Select(s => s.ID);
 
             // Diff the current services aginst the known services
             IEnumerable<ushort> joined, left;
@@ -127,7 +127,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
         {
             try
             {
-                await client.Agent.ServiceDeregister(ServerManager.ServerID.ToString());
+                await client.Agent.ServiceDeregister(RemoteServerManager.ServerID.ToString());
             }
             catch (Exception e)
             {
