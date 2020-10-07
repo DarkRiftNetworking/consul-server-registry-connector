@@ -98,8 +98,8 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
 
             // Diff the current services aginst the known services
             IEnumerable<ushort> joined, left;
-            joined = parsedServices.Keys.Except(knownServices);
-            left = knownServices.Except(parsedServices.Keys);
+            joined = parsedServices.Keys.Where(k => !knownServices.Contains(k));
+            left = knownServices.Where(k => !parsedServices.ContainsKey(k));
 
             foreach (ushort joinedID in joined)
             {
