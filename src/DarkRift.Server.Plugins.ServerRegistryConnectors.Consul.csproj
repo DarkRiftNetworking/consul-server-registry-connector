@@ -12,8 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="$(UserProfile)/.darkrift/installed/pro/core/dev/Lib/DarkRift.dll" />
-    <Reference Include="$(UserProfile)/.darkrift/installed/pro/core/dev/Lib/DarkRift.Server.dll" />
+    <Reference Include="$(UserProfile)/.darkrift/installed/pro/core/2.8.1/Lib/DarkRift.dll" />
+    <Reference Include="$(UserProfile)/.darkrift/installed/pro/core/2.8.1/Lib/DarkRift.Server.dll" />
   </ItemGroup>
 
 </Project>
