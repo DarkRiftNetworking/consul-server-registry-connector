@@ -35,6 +35,11 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
         private readonly TimeSpan healthCheckTimeout = TimeSpan.FromSeconds(60);
 
         /// <summary>
+        /// The service name to register as in Consul.
+        /// </summary>
+        private readonly string serviceName = "darkrift";
+
+        /// <summary>
         ///     The client to connect to Consul via.
         /// </summary>
         private readonly ConsulClient client;
@@ -65,6 +70,9 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
                 if (healthCheckTimeout < TimeSpan.FromMinutes(1))
                     throw new InvalidOperationException("healthCheckTimeout property cannot be less than 1 minute.");
             }
+
+            if (pluginLoadData.Settings["serviceName"] != null)
+                serviceName = pluginLoadData.Settings["serviceName"];
         }
 
         /// <summary>
@@ -77,10 +85,10 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
 
             // Query Consul for the current list of services
             // TODO the library we use doesn't seem to allow us to get only services with a passing health check
-            QueryResult<Dictionary<string, AgentService>> result;
+            QueryResult<CatalogService[]> result;
             try
             {
-                result = await client.Agent.Services();
+                result = await client.Catalog.Service(serviceName);
             }
             catch (Exception e)
             {
@@ -88,12 +96,13 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
                 return;
             }
 
-            Dictionary<string, AgentService> services = result.Response;
+            CatalogService[] services = result.Response;
 
             // Map to ushort IDs
-            Dictionary<ushort, AgentService> parsedServices = services.ToDictionary(kv => ushort.Parse(kv.Key), kv => kv.Value);
+            Dictionary<ushort, CatalogService> parsedServices = services.ToDictionary(s => ushort.Parse(s.ServiceID), s => s);
 
             // Get all known sevices
+            // TODO if a server isn't in a group we're connected with then they're not retured here which causes us to perpetually discover them
             IEnumerable<ushort> knownServices = RemoteServerManager.GetAllGroups().SelectMany(g => g.GetAllRemoteServers()).Select(s => s.ID);
 
             // Diff the current services aginst the known services
@@ -103,10 +112,10 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
 
             foreach (ushort joinedID in joined)
             {
-                AgentService service = parsedServices[joinedID];
-                string group = service.Tags.First().Substring(6);
+                CatalogService service = parsedServices[joinedID];
+                string group = service.ServiceTags.First().Substring(6);
 
-                HandleServerJoin(joinedID, group, service.Address, (ushort)service.Port, service.Meta);
+                HandleServerJoin(joinedID, group, service.Address, (ushort)service.ServicePort, service.ServiceMeta);
             }
 
             //TODO consider just a set method instead of/as well as join/leave
@@ -167,7 +176,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul
             AgentServiceRegistration service = new AgentServiceRegistration
             {
                 ID = id.ToString(),
-                Name = "DarkRift Server (" + group + ")",
+                Name = serviceName,
                 Address = host,
                 Port = port,
                 Tags = new string[] { "group:" + group },

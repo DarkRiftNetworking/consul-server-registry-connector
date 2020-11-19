@@ -60,4 +60,5 @@ The following settings are exposed and can be configured using the `<settings>` 
 - `consulToken` - Token is used to provide an ACL token which overrides the agent's default token. This ACL token is used for every request by clients created using this configuration.
 - `healthCheckUrl` - The URL to set as the Consul health check for the server. Defaults to `http://localhost:10666/health`.
 - `healthCheckPollIntervalMs` - The poll interval of the Consul health check for the server, in milliseconds. Defaults to `5000ms`.
-- `healthCheckTimeoutMs` - The maximum time the Consul health check for the server can be failing for before the server is deregistered, in milliseconds. The Minimum value is `60000ms`, and granularity ~`30000ms`. Defaults to `60000ms`
+- `healthCheckTimeoutMs` - The maximum time the Consul health check for the server can be failing for before the server is deregistered, in milliseconds. The Minimum value is `60000ms`, and granularity ~`30000ms`. Defaults to `60000ms`.
+- `serviceName` - The service name to register as in Consul. Defaults to `darkrift`.
