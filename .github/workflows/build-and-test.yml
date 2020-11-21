@@ -1,0 +1,40 @@
+name: Build and Test
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.1.101
+    - name: Pull DR
+      # Use wget until DR CLI is available in a docker image
+      run: wget https://darkriftnetworking.com/DarkRift2/Releases/2.8.1/Pro/Core/?invoice=$SECRET_INVOICE_NO -O dr.zip
+      env: # Or as an environment variable
+        SECRET_INVOICE_NO: ${{ secrets.SECRET_INVOICE_NO }}
+    - name: Extract DR
+      # Use wget until DR CLI is available in a docker image
+      run: unzip dr.zip -d ~/.darkrift/installed/pro/core/2.8.1/
+    - name: Build
+      run: dotnet build --configuration Release src/
+    - name: Test
+      run: dotnet test tests/
+      env:
+        CONSUL_URI: "http://consul:8500"
+    - name: Publish
+      run: dotnet publish --configuration Release src/
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: consul-server-registry-connector
+        path: ./src/bin/Release/netstandard2.0/publish/
+
+    services:
+      consul:
+        image: consul
+        env:
+          CONSUL_BIND_INTERFACE: eth0
