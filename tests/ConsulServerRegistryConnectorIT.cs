@@ -14,7 +14,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul.Tests
     /// Tests for the ConsulServerRegistryConnector.
     /// </sumamry>
     [TestClass]
-    public class ConsulServerRegistryConnectorTests
+    public class ConsulServerRegistryConnectorIT
     {
         /// <summary>
         /// The process consul is running on (if present)
@@ -69,8 +69,8 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul.Tests
             DarkRiftServer server2 = StartServer("Group2", true);
 
             // AND the servers know of each other
-            WaitUntil("Timed out waiting for consul to start.", () => Assert.AreEqual(1, server1.RemoteServerManager.GetGroup("Group2").Count), TimeSpan.FromSeconds(30));
-            WaitUntil("Timed out waiting for consul to start.", () => Assert.AreEqual(1, server2.RemoteServerManager.GetGroup("Group1").Count), TimeSpan.FromSeconds(30));
+            WaitUntil("Timed out waiting for server 1 to discover server 2.", () => Assert.AreEqual(1, server1.RemoteServerManager.GetGroup("Group2").Count), TimeSpan.FromSeconds(30));
+            WaitUntil("Timed out waiting for server 2 to discover server 1.", () => Assert.AreEqual(1, server2.RemoteServerManager.GetGroup("Group1").Count), TimeSpan.FromSeconds(30));
 
             // WHEN the first server closes
             server1.Dispose();
@@ -89,8 +89,8 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul.Tests
             DarkRiftServer server2 = StartServer("Group2", true);
 
             // AND the servers know of each other
-            WaitUntil("Timed out waiting for consul to start.", () => Assert.AreEqual(1, server1.RemoteServerManager.GetGroup("Group2").Count), TimeSpan.FromSeconds(30));
-            WaitUntil("Timed out waiting for consul to start.", () => Assert.AreEqual(1, server2.RemoteServerManager.GetGroup("Group1").Count), TimeSpan.FromSeconds(30));
+            WaitUntil("Timed out waiting for server 1 to discover server 2.", () => Assert.AreEqual(1, server1.RemoteServerManager.GetGroup("Group2").Count), TimeSpan.FromSeconds(30));
+            WaitUntil("Timed out waiting for server 2 to discover server 1.", () => Assert.AreEqual(1, server2.RemoteServerManager.GetGroup("Group1").Count), TimeSpan.FromSeconds(30));
 
             // WHEN waiting (a long time)
             // THEN the second server sees server 1 timeout
@@ -207,7 +207,7 @@ namespace DarkRift.Server.Plugins.ServerRegistryConnectors.Consul.Tests
         ///     Probes the consul API for a response to see if it is running or not.
         /// </summary>
         /// <returns>If consul is running or not.</returns>
-        private static bool IsConsulRunning()
+        private bool IsConsulRunning()
         {
             try
             {
